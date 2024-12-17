@@ -1,98 +1,135 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
-
-const token = JSON.parse(sessionStorage.getItem("token"));
-
 const initialState = {
-  isAuthenticated: !!token,
-  isLoading: false,
+  isAuthenticated: false,
+  isLoading: true,
   user: null,
-  token: token || null,
-  error: null,
+  token: null,
 };
 
-export const registerUser = createAsyncThunk("auth/registerUser", async (formData, { rejectWithValue }) => {
-  try {
+export const registerUser = createAsyncThunk(
+  "/auth/register",
+
+  async (formData) => {
     const response = await axios.post(
       `${import.meta.env.VITE_API_URL}/api/auth/register`,
       formData,
-      { withCredentials: true }
+      {
+        withCredentials: true,
+      }
     );
-    return response.data;
-  } catch (error) {
-    return rejectWithValue(error.response?.data || "Registration failed.");
-  }
-});
 
-export const loginUser = createAsyncThunk("auth/loginUser", async (formData, { rejectWithValue }) => {
-  try {
+    return response.data;
+  }
+);
+
+export const loginUser = createAsyncThunk(
+  "/auth/login",
+
+  async (formData) => {
     const response = await axios.post(
       `${import.meta.env.VITE_API_URL}/api/auth/login`,
       formData,
-      { withCredentials: true }
+      {
+        withCredentials: true,
+      }
     );
-    return response.data;
-  } catch (error) {
-    return rejectWithValue(error.response?.data || "Login failed.");
-  }
-});
 
-export const logoutUser = createAsyncThunk("auth/logoutUser", async (_, { rejectWithValue }) => {
-  try {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, { withCredentials: true });
     return response.data;
-  } catch (error) {
-    return rejectWithValue(error.response?.data || "Logout failed.");
   }
-});
+);
 
-export const checkAuth = createAsyncThunk("auth/checkAuth", async (_, { rejectWithValue }) => {
-  const token = JSON.parse(sessionStorage.getItem("token"));
-  if (!token) {
-    return rejectWithValue("No token found.");
-  }
-  try {
-    const decodedToken = jwt_decode(token);
-    if (decodedToken.exp * 1000 < Date.now()) {
-      throw new Error("Token expired");
-    }
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/check-auth`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+export const logoutUser = createAsyncThunk(
+  "/auth/logout",
+
+  async () => {
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_URL}/api/auth/logout`,
+      {},
+      {
+        withCredentials: true,
+      }
+    );
+
     return response.data;
-  } catch (error) {
-    return rejectWithValue(error.response?.data || "Authentication failed.");
   }
-});
+);
+
+// export const checkAuth = createAsyncThunk(
+//   "/auth/checkauth",
+
+//   async () => {
+//     const response = await axios.get(
+//       `${import.meta.env.VITE_API_URL}/api/auth/check-auth`,
+//       {
+//         withCredentials: true,
+//         headers: {
+//           "Cache-Control":
+//             "no-store, no-cache, must-revalidate, proxy-revalidate",
+//         },
+//       }
+//     );
+
+//     return response.data;
+//   }
+// );
+
+export const checkAuth = createAsyncThunk(
+  "/auth/checkauth",
+
+  async (token) => {
+    const response = await axios.get(
+      `${import.meta.env.VITE_API_URL}/api/auth/check-auth`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+        },
+      }
+    );
+
+    return response.data;
+  }
+);
 
 const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
+    setUser: (state, action) => {},
     resetTokenAndCredentials: (state) => {
       state.isAuthenticated = false;
       state.user = null;
       state.token = null;
-      sessionStorage.removeItem("token");
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(registerUser.fulfilled, (state) => {
+      .addCase(registerUser.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(registerUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.error = null;
+        state.user = null;
+        state.isAuthenticated = false;
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload || "Registration failed.";
+        state.user = null;
+        state.isAuthenticated = false;
+      })
+      .addCase(loginUser.pending, (state) => {
+        state.isLoading = true;
       })
       .addCase(loginUser.fulfilled, (state, action) => {
+        console.log(action);
+
         state.isLoading = false;
-        state.user = action.payload.user || null;
+        state.user = action.payload.success ? action.payload.user : null;
         state.isAuthenticated = action.payload.success;
         state.token = action.payload.token;
-        state.error = null;
         sessionStorage.setItem("token", JSON.stringify(action.payload.token));
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -100,29 +137,27 @@ const authSlice = createSlice({
         state.user = null;
         state.isAuthenticated = false;
         state.token = null;
-        state.error = action.payload || "Login failed.";
+      })
+      .addCase(checkAuth.pending, (state) => {
+        state.isLoading = true;
       })
       .addCase(checkAuth.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.user || null;
+        state.user = action.payload.success ? action.payload.user : null;
         state.isAuthenticated = action.payload.success;
-        state.error = null;
       })
       .addCase(checkAuth.rejected, (state, action) => {
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
-        state.error = action.payload || "Authentication failed.";
       })
-      .addCase(logoutUser.fulfilled, (state) => {
+      .addCase(logoutUser.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = null;
         state.isAuthenticated = false;
-        state.token = null;
-        sessionStorage.removeItem("token");
       });
   },
 });
 
-export const { resetTokenAndCredentials } = authSlice.actions;
+export const { setUser, resetTokenAndCredentials } = authSlice.actions;
 export default authSlice.reducer;
